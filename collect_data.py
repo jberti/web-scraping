@@ -4,22 +4,40 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup as bs
 
+base_url = "https://books.toscrape.com/"
 
-if __name__ == "__main__":
-    # Headers for request
-    HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
-        AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US, en;q=0.5",
-    }
+# Headers for request
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
+    AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US, en;q=0.5",
+}
+
+def getTitle(soup):
+    return soup.find("h1").text.strip()
+
+def getRate(soup):
+    if soup.find("p", class_ = "star-rating One") != None:
+        return "1"
+    elif soup.find("p", class_ = "star-rating Two")  != None:
+        return "2"
+    elif soup.find("p", class_ = "star-rating Three")  != None:
+        return "3"
+    elif soup.find("p", class_ = "star-rating Four")  != None:
+        return "4"
+    elif soup.find("p", class_ = "star-rating Five")  != None:
+        return "5"
+    else:
+        return "0"
+
+def getBooksLinksList():    
 
     books_links_list = []
     page_index = "page-1.html"
-    base_url = "https://books.toscrape.com/"
+    
     stop = False
     
-    # Selecting pages
-    
+    # Get links for details of all books    
     while not stop:
         page_url = base_url+"catalogue/"+page_index
         page = requests.get(page_url, headers=HEADERS)
@@ -31,6 +49,7 @@ if __name__ == "__main__":
             #get the next page
             pager = list.find_next("ul", class_ = "pager") 
             li = pager.find("li", class_ = "next")
+            # if there is no next page, mark the stop flag to true to end the iteration
             if li == None:
                 stop = True
             else:
@@ -43,4 +62,93 @@ if __name__ == "__main__":
                 for a in a_elements:
                     books_links_list.append(a["href"])
         else: 
-            stop = True
+            stop = True  
+    return books_links_list
+
+def getBooksInfoDict(booksLinksList):
+
+    # Creating the dictionary schema
+    result: Dict[str, List[str]] = {
+        "UPC": [],
+        "Title": [],
+        "Product_Type": [],
+        "Price(excl.tax)": [],
+        "Price(incl.tax)": [],
+        "Tax": [],
+        "Stock": [],
+        "Number_of_reviews": [],
+        "Rating": [],
+    }
+
+    # Read a book info for each book link
+    for link in booksLinksList:
+        page_url = base_url+"catalogue/"+link
+        page = requests.get(page_url, headers=HEADERS)
+        if page.status_code == 200:
+            soup = bs(page.content, "html.parser")
+            top = soup.find("div", class_="col-sm-6 product_main")
+
+            result["Title"].append(getTitle(top))
+            result["Rating"].append(getRate(top))
+
+            info = soup.find("table", class_ = "table table-striped")
+            
+            upc = info.find_next("td")
+            result["UPC"].append(upc.text.strip())
+            
+            type = upc.find_next("td")
+            result["Product_Type"].append(type.text.strip())
+
+            price_excl_tax = type.find_next("td")
+            result["Price(excl.tax)"].append(price_excl_tax.text.strip())
+
+            price_incl_tax = price_excl_tax.find_next("td")
+            result["Price(incl.tax)"].append(price_incl_tax.text.strip())
+
+            tax = price_incl_tax.find_next("td")
+            result["Tax"].append(tax.text.strip())
+
+            avaiability = tax.find_next("td")
+            result["Stock"].append(avaiability.text.strip())
+
+            reviews = avaiability.find_next("td")
+            result["Number_of_reviews"].append(reviews.text.strip())
+
+    return result
+
+def getBooksDataset(booksDict):
+    # Creating pandas dataframe
+    dataset_books = pd.DataFrame.from_dict(booksDict)
+    # Convert rating field from string to integer
+    dataset_books['Rating'] = dataset_books['Rating'].astype(int)
+    # Here I extract the quantity in stock value from the text field containing the value.
+    dataset_books['Stock'] = dataset_books['Stock'].str.extract(r'(\d+)')
+    # Here I tranform the price from text like £10.00 to a numeric field
+    dataset_books['Price(excl.tax)'] = dataset_books['Price(excl.tax)'].str.replace("£","")
+    dataset_books['Price(excl.tax)'] = dataset_books['Price(excl.tax)'].astype(float)
+    dataset_books['Price(incl.tax)'] = dataset_books['Price(incl.tax)'].str.replace("£","")
+    dataset_books['Price(incl.tax)'] = dataset_books['Price(incl.tax)'].astype(float)
+
+    dataset_books['Tax'] = dataset_books['Tax'].str.replace("£","")
+
+    return dataset_books
+
+def SaveToCSV(dataset_books):
+    # Exporting dataset as .csv file
+    dataset_books.to_csv("dataset_books.csv", index=False) 
+
+def main():
+    books_links_list = getBooksLinksList()    
+    booksDict = getBooksInfoDict(books_links_list)
+    dataset_books = getBooksDataset(booksDict)
+    SaveToCSV(dataset_books)
+
+if __name__ == "__main__":
+    main()
+
+    
+
+    
+               
+
+        
