@@ -14,21 +14,29 @@ HEADERS = {
 }
 
 def getTitle(soup):
-    return soup.find("h1").text.strip()
+    try:
+        bookTitle = soup.find("h1").text.strip()
+    except AttributeError:
+        bookTitle = ""
+    return bookTitle
 
 def getRate(soup):
-    if soup.find("p", class_ = "star-rating One") != None:
-        return "1"
-    elif soup.find("p", class_ = "star-rating Two")  != None:
-        return "2"
-    elif soup.find("p", class_ = "star-rating Three")  != None:
-        return "3"
-    elif soup.find("p", class_ = "star-rating Four")  != None:
-        return "4"
-    elif soup.find("p", class_ = "star-rating Five")  != None:
-        return "5"
-    else:
-        return "0"
+    try:
+        if soup.find("p", class_ = "star-rating One") != None:
+            bookRate = 1
+        elif soup.find("p", class_ = "star-rating Two")  != None:
+            bookRate = 2
+        elif soup.find("p", class_ = "star-rating Three")  != None:
+            bookRate = 3
+        elif soup.find("p", class_ = "star-rating Four")  != None:
+            bookRate = 4
+        elif soup.find("p", class_ = "star-rating Five")  != None:
+            bookRate = 5
+        else:
+            bookRate = 0
+    except AttributeError:
+        bookRate = ""
+    return bookRate
 
 def getBooksLinksList():    
 
@@ -119,8 +127,7 @@ def getBooksInfoDict(booksLinksList):
 def getBooksDataset(booksDict):
     # Creating pandas dataframe
     dataset_books = pd.DataFrame.from_dict(booksDict)
-    # Convert rating field from string to integer
-    dataset_books['Rating'] = dataset_books['Rating'].astype(int)
+    
     # Here I extract the quantity in stock value from the text field containing the value.
     dataset_books['Stock'] = dataset_books['Stock'].str.extract(r'(\d+)')
     # Here I tranform the price from text like £10.00 to a numeric field
@@ -133,7 +140,7 @@ def getBooksDataset(booksDict):
 
     return dataset_books
 
-def SaveToCSV(dataset_books):
+def saveToCSV(dataset_books):
     # Exporting dataset as .csv file
     dataset_books.to_csv("dataset_books.csv", index=False) 
 
@@ -141,7 +148,7 @@ def main():
     books_links_list = getBooksLinksList()    
     booksDict = getBooksInfoDict(books_links_list)
     dataset_books = getBooksDataset(booksDict)
-    SaveToCSV(dataset_books)
+    saveToCSV(dataset_books)
 
 if __name__ == "__main__":
     main()
