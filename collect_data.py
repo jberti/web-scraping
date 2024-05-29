@@ -3,6 +3,7 @@ from typing import Dict, List
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup as bs
+from sqlalchemy import create_engine as ce
 
 base_url = "https://books.toscrape.com/"
 
@@ -37,6 +38,16 @@ def getRate(soup):
     except AttributeError:
         bookRate = ""
     return bookRate
+
+def getCategory(soup):
+    try:
+        breadcrumb = soup.find("ul", class_ = "breadcrumb")
+        lis = breadcrumb.find_all("a")
+        a = lis[2]
+        category = a.text.strip()
+    except AttributeError:
+        category = ""
+    return category
 
 def getBooksLinksList():    
 
@@ -79,6 +90,7 @@ def getBooksInfoDict(booksLinksList):
     result: Dict[str, List[str]] = {
         "UPC": [],
         "Title": [],
+        "Category": [],
         "Product_Type": [],
         "Price(excl.tax)": [],
         "Price(incl.tax)": [],
@@ -98,6 +110,7 @@ def getBooksInfoDict(booksLinksList):
 
             result["Title"].append(getTitle(top))
             result["Rating"].append(getRate(top))
+            result["Category"].append(getCategory(soup))
 
             info = soup.find("table", class_ = "table table-striped")
             
@@ -138,17 +151,31 @@ def getBooksDataset(booksDict):
 
     dataset_books['Tax'] = dataset_books['Tax'].str.replace("£","")
 
+    dataset_books.set_index('UPC')
+
     return dataset_books
 
-def saveToCSV(dataset_books):
+def saveToCSV(dataset_books: pd.DataFrame):
     # Exporting dataset as .csv file
     dataset_books.to_csv("dataset_books.csv", index=False) 
 
+def saveToDataBase(dataset_books: pd.DataFrame):
+    
+    engine = ce('postgresql://postgres:pgsql@localhost:5432/books')
+    
+    dataset_books.to_sql(name = "tbbooks", con = engine, if_exists= 'replace',index= False)
+    
+
 def main():
-    books_links_list = getBooksLinksList()    
+    books_links_list = getBooksLinksList() 
+    #books_links_list = []
+    #books_links_list.append("its-only-the-himalayas_981/index.html")   
     booksDict = getBooksInfoDict(books_links_list)
     dataset_books = getBooksDataset(booksDict)
+    #dataset_books = pd.read_csv("dataset_books.csv")
     saveToCSV(dataset_books)
+    saveToDataBase(dataset_books)
+    
 
 if __name__ == "__main__":
     main()
